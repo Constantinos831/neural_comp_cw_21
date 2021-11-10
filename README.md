@@ -3,7 +3,7 @@
 Neural Computation\
 Coursework 2021/2022\
 Released: Friday November 5th 2021\
-Deadline: Tuesday November 29th 2021 at 18:00 (UK time) for all students.\
+Deadline: Monday November 29th 2021 at 18:00 (UK time) for all students.\
 Weight: 20 %
 
 Group 31\
