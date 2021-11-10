@@ -1,5 +1,3 @@
-# Neural_Comp_CourseWork_21
-
 # Neural Computation CourseWork 2021
 
 Neural Computation\
