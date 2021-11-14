@@ -1,228 +1,196 @@
-import torch
-from torch.utils.data.dataset import Dataset  # For custom data-sets
-import torchvision.transforms as transforms
-from PIL import Image
-import numpy as np
-import torchvision
-import matplotlib.pyplot as plt
-import torch.nn as nn
+#!/usr/bin/env python
+# coding: utf-8
 
-import numpy
-import torch.optim as optim
+# In[35]:
+
+
+import torch 
+import torch.utils.data as data 
+import cv2 
 import os
+from glob import glob 
+import numpy as np 
+from matplotlib import pyplot as plt 
+import torch.optim as optim
+from torch.utils.data import DataLoader 
+import torch.nn as nn 
+import torch.nn.functional as F 
+from torch.autograd import Variable 
 
-
-
-#gets current device
+# Finds the device the data will be computed
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(f"The current device is {device}")
 
+# Create variables which stores the location of the training images and validation images.
+train_data_path = './data/train'
 
-folder_data_train = ("./data/train/image/")
-folder_mask_train = ('./data/train/mask/')
+val_data_path = './data/val'
 
-folder_data_val = ("./data/val/image/")
-folder_mask_val = ('./data/val/mask/')
+# It visualises the actual MR image and its mask.
+def show_image_mask(img, mask, cmap='gray'): 
+    fig = plt.figure(figsize=(5,5))
+    plt.subplot(1, 2, 1)
+    plt.imshow(img, cmap=cmap)
+    plt.axis('off')
+    plt.subplot(1, 2, 2)
+    plt.imshow(mask, cmap=cmap)
+    plt.axis('off')
+    
+#image = cv2.imread(os.path.join(folder_data_train,'image','cmr10.png'), cv2.IMREAD_UNCHANGED) # A random image to find later the size of it.
+#mask = cv2.imread(os.path.join(folder_data_train,'mask','cmr10_mask.png'), cv2.IMREAD_UNCHANGED)
+#show_image_mask(image, mask, cmap='gray')
+#plt.pause(1)
+#cv2.imwrite(os.path.join('./','cmr1.png'), mask*85)
 
-class CustomDataset(Dataset):
-    def __init__(self, image_paths, target_paths):   # initial logic
-         self.image_paths = image_paths
-         self.target_paths = target_paths
-         self.transforms = transforms.Compose(
-             [transforms.ToTensor(),
-              # transforms.Grayscale(num_output_channels=1),
-              transforms.Normalize((0), (0.5)),
-              transforms.Resize((96, 96))])
 
+# It loads all the images for the training files.
+class CustomDataset(data.Dataset):
+    def __init__(self, root=''):
+        super(CustomDataset, self).__init__()
+        self.img_files = glob(os.path.join(root,'image','*.png'))
+        self.mask_files = []
+        for img_path in self.img_files:
+            basename = os.path.basename(img_path)
+            self.mask_files.append(os.path.join(root,'mask',basename[:-4]+'_mask.png'))
+            
 
     def __getitem__(self, index):
-        image = Image.open(str(self.image_paths) + os.listdir(self.image_paths)[index])#.convert('RGB')
-        mask = Image.open(str(self.target_paths) + os.listdir(self.target_paths)[index])#.convert('RGB')
-        t_image = self.transforms(image)
-        t_mask = self.transforms(mask)
-        return t_image, t_mask
+            img_path = self.img_files[index]
+            mask_path = self.mask_files[index]
+            data = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
+            label = cv2.imread(mask_path, cv2.IMREAD_UNCHANGED)
+            return torch.from_numpy(data).float(), torch.from_numpy(label).float()
 
-    def __len__(self):  # return count of sample we have
-        return len(os.listdir(self.image_paths))
+    def __len__(self):
+        return len(self.img_files)
+    
+
+class TestDataset(data.Dataset):
+    def __init__(self, root=''):
+        super(TestDataset, self).__init__()
+        self.img_files = glob(os.path.join(root,'image','*.png'))
+
+    def __getitem__(self, index):
+            img_path = self.img_files[index]
+            data = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
+            return torch.from_numpy(data).float()
+
+    def __len__(self):
+        return len(self.img_files)
 
 
-train_set = CustomDataset(folder_data_train, folder_mask_train)
-valid_set = CustomDataset(folder_data_val, folder_mask_val)
+# Since every image is black and white, they have depth 1. So the unedit image has a weight and heigh 96 and depth 1.
+# So we need the output to have channel 4.
 
-batch_size = 5
+# The model is the encode of a combination of the image in the CNN power point pg78 and the figure 5 of 
+# https://medium.com/analytics-vidhya/creating-a-very-simple-u-net-model-with-pytorch-for-semantic-segmentation-of-satellite-images-223aa216e705
+# First of all, the model will take an image with size 96x96 with depth 4, it will be convoluted to a matrix of size 48x48 with depht 32 using 
+# max pooling, again it will be convoluted to a new matrix of size 24x24 with depht 64 using max pooling, again it will be convoluted 
+# to a matrix of size 12x12 with depht 128 using max pooling. Then, the last matrix will be convoluted to a matrix
+# of size 24x24 with depth 64 using max unpooling, it will be convoluted to matrix of size 48x48 with depth 32 using
+# max unpooling and it will be convoluted to a matrix of size 96x96 with depht 4 using max unpooling. So, first it pools
+# the matrix and then unpool the matrix to give back the same size. 
 
-#train_set = CustomDataset(folder_mask_train)
-train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=0)
+class CNNSEG(nn.Module): # Define your model
+    def __init__(self):
+        super(CNNSEG, self).__init__()
+        self.conv1 = nn.Conv2d(4,16,3,padding=1) # The convolution which takes 4 channel and gives back 32 channels.
+        self.conv2 = nn.Conv2d(16,64,3,padding=1) # The convolution which takes 32 channel and gives back 64 channels.
+        self.conv3 = nn.Conv2d(64,128,3,padding=1) # The convolution which takes 64 channel and gives back 128 channels.
+        self.unconv1 = nn.Conv2d(128,64,3,padding=1) # The convolution which takes 128 channel and gives back 64 channels.
+        self.unconv2 = nn.Conv2d(64,16,3,padding=1) # The convolution which takes 64 channel and gives back 32 channels.
+        self.unconv3 = nn.Conv2d(16,4,3,padding=1) # The convolution which takes 32 channel and gives back 4 channels.
+        self.pool = nn.MaxPool2d(2,2,return_indices=True) # A 2x2 max pooling, we need the indices from the pooling so it is True.https://pytorch.org/docs/stable/generated/torch.nn.MaxPool2d.html
+        self.unpool = nn.MaxUnpool2d(2,2) # A 2x2 max unpooling. #https://pytorch.org/docs/stable/generated/torch.nn.MaxUnpool2d.html
 
-#test_set = CustomDataset(folder_data_val)
+    def forward(self, x):
+        x , ind1 = self.pool(F.relu(self.conv1(x)))
+        x , ind2 = self.pool(F.relu(self.conv2(x)))
+        x , ind3 = self.pool(F.relu(self.conv3(x)))
+        x = F.relu(self.unconv1(self.unpool(x,ind3)))
+        x = F.relu(self.unconv2(self.unpool(x,ind2)))
+        x = F.relu(self.unconv3(self.unpool(x,ind1)))
+        return x
+
+model = CNNSEG()
+
+
+def categorical_dice(mask1, mask2, label_class=1):
+    """
+    Dice score of a specified class between two volumes of label masks.
+    (classes are encoded but by label class number not one-hot )
+    Note: stacks of 2D slices are considered volumes.
+
+    Args:
+        mask1: N label masks, numpy array shaped (H, W, N)
+        mask2: N label masks, numpy array shaped (H, W, N)
+        label_class: the class over which to calculate dice scores
+
+    Returns:
+        volume_dice
+    """
+    mask1_pos = (mask1 == label_class).astype(np.float32)
+    mask2_pos = (mask2 == label_class).astype(np.float32)
+    dice = 2 * np.sum(mask1_pos * mask2_pos) / (np.sum(mask1_pos) + np.sum(mask2_pos))
+    return dice
+
+#For Loss function I use the dice score.
+optimizer = optim.SGD(model.parameters(), lr=0.1,momentum=0.9)
+
+num_workers = 4
+
+batch_size = 4
+
+# Saves all the images in the variables train_set and valid_set.
+train_set = CustomDataset(train_data_path)
+valid_set = CustomDataset(val_data_path)
+
+# train_set = CustomDataset(folder_mask_train)
+training_data_loader = DataLoader(dataset=train_set, num_workers=num_workers, batch_size=batch_size, shuffle=True)
+
+# test_set = CustomDataset(folder_data_val)
 valid_loader = torch.utils.data.DataLoader(valid_set, batch_size=batch_size, shuffle=False, num_workers=0)
 
-#classes
-classes = ('__background__', 'left ventricle', 'right ventricle', 'myocardium')
+for iteration, sample in enumerate(training_data_loader):
+    img, mask = sample
+    
+    show_image_mask(img[0,...].squeeze(), mask[0,...].squeeze()) #visualise all data in training set
+    plt.pause(1)
+    
+    # Make the input images, output masks and predicted output to be all channel 4. The predicted masks will be channel 4.
+    im = img.unsqueeze(1) # To put the dimension of the channel in the second place of the image. https://discuss.pytorch.org/t/change-the-dimension-of-tensor/51459/7
+    im_c4 = []
+    im_c4 = torch.from_numpy(np.concatenate((im,)*4, axis=1)) # https://stackoverflow.com/questions/40119743/convert-a-grayscale-image-to-a-3-channel-image
+    
+    ma = mask.unsqueeze(1)
+    ma_c4 = torch.from_numpy(np.concatenate((ma,)*4, axis=1))
+    mask1 = ma_c4.numpy()
+    # The optimised gradients set to zero. https://pytorch.org/docs/stable/optim.html
+    optimizer.zero_grad()
 
-# DataLoader = {
-#     'train': train_loader,
-#     'valid': test_loader,
-# }
-
-def imshow(img):
-    img = img / 2
-    npimg = img.numpy()
-    plt.imshow(np.transpose(npimg, (1, 2, 0)))
-    plt.show()
-
-
-
-dataiter = iter(train_loader)
-images, labels = dataiter.next()
-
-
-# show images
-imshow(torchvision.utils.make_grid(images))
-
-
-# dice loss ========================================================================
-# PyTorch
-def dice_loss(pred, target):
-    """This definition generalize to real valued pred and target vector.
-This should be differentiable.
-    pred: tensor with first dimension as batch
-    target: tensor with first dimension as batch
-    """
-
-    smooth = 1.
-    # have to use contiguous since they may from a torch.view op
-    iflat = pred.contiguous().view(-1)
-    tflat = target.contiguous().view(-1)
-    intersection = (iflat * tflat).sum()
-
-    A_sum = torch.sum(tflat * iflat)
-    B_sum = torch.sum(tflat * tflat)
-
-    return 1 - ((2. * intersection + smooth) / (A_sum + B_sum + smooth))
-
-# define neural network ===============================================================================
-class UNET(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-
-        self.conv1 = self.contract_block(in_channels, 32, 7, 3)
-        self.conv2 = self.contract_block(32, 64, 3, 1)
-        self.conv3 = self.contract_block(64, 128, 3, 1)
-
-        self.upconv3 = self.expand_block(128, 64, 3, 1)
-        self.upconv2 = self.expand_block(64*2, 32, 3, 1)
-        self.upconv1 = self.expand_block(32*2, out_channels, 3, 1)
-
-    def __call__(self, x):
-
-        # downsampling part
-        conv1 = self.conv1(x)
-        conv2 = self.conv2(conv1)
-        conv3 = self.conv3(conv2)
-
-        upconv3 = self.upconv3(conv3)
-
-        upconv2 = self.upconv2(torch.cat([upconv3, conv2], 1))
-        upconv1 = self.upconv1(torch.cat([upconv2, conv1], 1))
-
-        return upconv1
-
-    def contract_block(self, in_channels, out_channels, kernel_size, padding):
-
-        contract = nn.Sequential(
-            torch.nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=1, padding=padding),
-            torch.nn.BatchNorm2d(out_channels),
-            torch.nn.ReLU(),
-            torch.nn.Conv2d(out_channels, out_channels, kernel_size=kernel_size, stride=1, padding=padding),
-            torch.nn.BatchNorm2d(out_channels),
-            torch.nn.ReLU(),
-            torch.nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-                                 )
-
-        return contract
-
-    def expand_block(self, in_channels, out_channels, kernel_size, padding):
-
-        expand = nn.Sequential(torch.nn.Conv2d(in_channels, out_channels, kernel_size, stride=1, padding=padding),
-                            torch.nn.BatchNorm2d(out_channels),
-                            torch.nn.ReLU(),
-                            torch.nn.Conv2d(out_channels, out_channels, kernel_size, stride=1, padding=padding),
-                            torch.nn.BatchNorm2d(out_channels),
-                            torch.nn.ReLU(),
-                            torch.nn.ConvTranspose2d(out_channels, out_channels, kernel_size=3, stride=2, padding=1, output_padding=1)
-                            )
-        return expand
-
-# defining net parameters=================================================================================
-
-# moves net to device
-net = UNET(1,1).to(device)
-
-#loss fucntion
-criterion = dice_loss
-
-# optimiser function
-optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
-
-mini_batch = 2
-
-#training net========================================================================================
-
-def acc_metric(predb, yb):
-    return (predb.argmax(dim=1) == yb.to(device)).float().mean()
+    mask_pr = model(im_c4) # Returns the predicted mask. Forward probacation
+    mask2 = ma_c4.numpy()
+    # Calculate the cross entropy loss for the predicted mask and the actual mask.
+    loss_m = categorical_dice(mask1,mask2,1) 
+    loss_m.backward() # Backward probacation
+    optimizer.step()
+    
 
 
-#goes over data set
-for epoch in range(10):  # loop over the dataset multiple times
-
-    running_loss = 0.0
-    for i, data in enumerate(train_loader, 0):
-        # get the inputs; data is a list of [inputs, labels] and move them to
-        # the current device
-        inputs, labels = data
-        inputs = inputs.to(device)
-        labels = labels.to(device)
-
-        # zero the parameter gradients
-        optimizer.zero_grad()
-
-        # forward + backward + optimize
-        outputs = net(inputs)
-        loss = criterion(outputs, labels)
-        loss.backward()
-        optimizer.step()
-
-        # print statistics - epoch and loss
-        running_loss += loss.item()
-        if i % mini_batch == mini_batch-1:  # print every 2000 mini-batches
-            print('[%d, %5d] training loss: %.3f' %
-                  (epoch + 1, i + 1, running_loss / mini_batch))
-            running_loss = 0.0
-    running_loss = 0.0
-
-    for i, data in enumerate(valid_loader, 0):
-        with torch.no_grad():
-            # get the inputs; data is a list of [inputs, labels] and move them to
-            # the current device
-            inputs, labels = data
-            inputs = inputs.to(device)
-            labels = labels.to(device)
+# In[ ]:
 
 
 
-            # forward + backward + optimize
-            outputs = net(inputs)
-            loss = criterion(outputs, labels)
 
-            # print statistics - epoch and loss
-            running_loss += loss.item()
-            if i % mini_batch == mini_batch - 1:  # print every 2000 mini-batches
-                print('[%d, %5d] valid loss: %.3f' %
-                      (epoch + 1, i + 1, running_loss / mini_batch))
-                running_loss = 0.0
 
-print('Finished Training')
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
 
 
 
