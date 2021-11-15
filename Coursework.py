@@ -134,7 +134,7 @@ def categorical_dice(mask1, mask2, label_class=1):
     dice = 2 * np.sum(mask1_pos * mask2_pos) / (np.sum(mask1_pos) + np.sum(mask2_pos))
     return dice
 
-#For Loss function I use the dice score.
+Loss = nn.CrossEntropyLoss()
 optimizer = optim.SGD(model.parameters(), lr=0.1,momentum=0.9)
 
 num_workers = 4
@@ -157,21 +157,18 @@ for iteration, sample in enumerate(training_data_loader):
     show_image_mask(img[0,...].squeeze(), mask[0,...].squeeze()) #visualise all data in training set
     plt.pause(1)
     
-    # Make the input images, output masks and predicted output to be all channel 4. The predicted masks will be channel 4.
+    # Make the input images to be channel 4, and after the network the predicted mask will be channel 4.
     im = img.unsqueeze(1) # To put the dimension of the channel in the second place of the image. https://discuss.pytorch.org/t/change-the-dimension-of-tensor/51459/7
-    im_c4 = []
     im_c4 = torch.from_numpy(np.concatenate((im,)*4, axis=1)) # https://stackoverflow.com/questions/40119743/convert-a-grayscale-image-to-a-3-channel-image
     
-    ma = mask.unsqueeze(1)
-    ma_c4 = torch.from_numpy(np.concatenate((ma,)*4, axis=1))
-    mask1 = ma_c4.numpy()
     # The optimised gradients set to zero. https://pytorch.org/docs/stable/optim.html
     optimizer.zero_grad()
 
-    mask_pr = model(im_c4) # Returns the predicted mask. Forward probacation
-    mask2 = ma_c4.numpy()
+    mask_p = model(im_c4) # Returns the predicted mask. Forward probacation
+    mask_pr = torch.argmax(mask_p,dim=1) #https://pytorch.org/docs/stable/generated/torch.argmax.html
+    
     # Calculate the cross entropy loss for the predicted mask and the actual mask.
-    loss_m = categorical_dice(mask1,mask2,1) 
+    loss = Loss(mask,mask_pr) 
     loss_m.backward() # Backward probacation
     optimizer.step()
     
