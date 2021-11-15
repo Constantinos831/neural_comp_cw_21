@@ -168,7 +168,7 @@ for iteration, sample in enumerate(training_data_loader):
     mask_pr = torch.argmax(mask_p,dim=1) #https://pytorch.org/docs/stable/generated/torch.argmax.html
     
     # Calculate the cross entropy loss for the predicted mask and the actual mask.
-    loss = Loss(mask,mask_pr) 
+    loss = Loss(mask_pr,mask)
     loss_m.backward() # Backward probacation
     optimizer.step()
     
