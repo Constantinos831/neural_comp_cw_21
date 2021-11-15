@@ -149,7 +149,7 @@ valid_set = CustomDataset(val_data_path)
 training_data_loader = DataLoader(dataset=train_set, num_workers=num_workers, batch_size=batch_size, shuffle=True)
 
 # test_set = CustomDataset(folder_data_val)
-valid_loader = torch.utils.data.DataLoader(valid_set, batch_size=batch_size, shuffle=False, num_workers=0)
+valid_loader = DataLoader(dataset=valid_set, num_workers=num_workers, batch_size=batch_size, shuffle=True)
 
 for iteration, sample in enumerate(training_data_loader):
     img, mask = sample
@@ -172,22 +172,4 @@ for iteration, sample in enumerate(training_data_loader):
     loss_m.backward() # Backward probacation
     optimizer.step()
     
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
 
