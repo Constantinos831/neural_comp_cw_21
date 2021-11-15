@@ -94,12 +94,12 @@ class TestDataset(data.Dataset):
 class CNNSEG(nn.Module): # Define your model
     def __init__(self):
         super(CNNSEG, self).__init__()
-        self.conv1 = nn.Conv2d(4,16,3,padding=1) # The convolution which takes 4 channel and gives back 32 channels.
-        self.conv2 = nn.Conv2d(16,64,3,padding=1) # The convolution which takes 32 channel and gives back 64 channels.
+        self.conv1 = nn.Conv2d(4,32,3,padding=1) # The convolution which takes 4 channel and gives back 32 channels.
+        self.conv2 = nn.Conv2d(32,64,3,padding=1) # The convolution which takes 32 channel and gives back 64 channels.
         self.conv3 = nn.Conv2d(64,128,3,padding=1) # The convolution which takes 64 channel and gives back 128 channels.
         self.unconv1 = nn.Conv2d(128,64,3,padding=1) # The convolution which takes 128 channel and gives back 64 channels.
-        self.unconv2 = nn.Conv2d(64,16,3,padding=1) # The convolution which takes 64 channel and gives back 32 channels.
-        self.unconv3 = nn.Conv2d(16,4,3,padding=1) # The convolution which takes 32 channel and gives back 4 channels.
+        self.unconv2 = nn.Conv2d(64,32,3,padding=1) # The convolution which takes 64 channel and gives back 32 channels.
+        self.unconv3 = nn.Conv2d(32,4,3,padding=1) # The convolution which takes 32 channel and gives back 4 channels.
         self.pool = nn.MaxPool2d(2,2,return_indices=True) # A 2x2 max pooling, we need the indices from the pooling so it is True.https://pytorch.org/docs/stable/generated/torch.nn.MaxPool2d.html
         self.unpool = nn.MaxUnpool2d(2,2) # A 2x2 max unpooling. #https://pytorch.org/docs/stable/generated/torch.nn.MaxUnpool2d.html
 
