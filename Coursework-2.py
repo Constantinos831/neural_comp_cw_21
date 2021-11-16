@@ -160,7 +160,7 @@ for iteration, sample in enumerate(training_data_loader):
     show_image_mask(img[0,...].squeeze(), mask[0,...].squeeze()) #visualise all data in training set
     plt.pause(1)
     
-    im = img.unsqueeze(1)
+    im = img.unsqueeze(1) # To put the dimension of the channel in the second place of the image. https://discuss.pytorch.org/t/change-the-dimension-of-tensor/51459/7
     
     # The optimised gradients set to zero. https://pytorch.org/docs/stable/optim.html
     optimizer.zero_grad()
@@ -179,7 +179,7 @@ for iteration, sample in enumerate(training_data_loader):
 #You don't need the below code. It is the code I remove from the yesterday code. I just left it here if someone need it.
 
 # Make the input images to be channel 4, and after the network the predicted mask will be channel 4.
-im = img.unsqueeze(1) # To put the dimension of the channel in the second place of the image. https://discuss.pytorch.org/t/change-the-dimension-of-tensor/51459/7
+
 im_c4 = torch.from_numpy(np.concatenate((im,)*4, axis=1)) # https://stackoverflow.com/questions/40119743/convert-a-grayscale-image-to-a-3-channel-image
 print(mask_p)
 mask_pr = torch.argmax(mask_p,dim=1) #https://pytorch.org/docs/stable/generated/torch.argmax.html
