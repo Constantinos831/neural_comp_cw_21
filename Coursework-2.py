@@ -174,9 +174,9 @@ for iteration, sample in enumerate(training_data_loader):
     optimizer.step()
     
 
-
+# The code end here.
 # In[ ]:
-
+#You don't need the below code. It is the code I remove from the yesterday code. I just left it here if someone need it.
 
 # Make the input images to be channel 4, and after the network the predicted mask will be channel 4.
 im = img.unsqueeze(1) # To put the dimension of the channel in the second place of the image. https://discuss.pytorch.org/t/change-the-dimension-of-tensor/51459/7
