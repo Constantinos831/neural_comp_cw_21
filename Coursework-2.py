@@ -135,6 +135,8 @@ def categorical_dice(mask1, mask2, label_class=1):
     dice = 2 * np.sum(mask1_pos * mask2_pos) / (np.sum(mask1_pos) + np.sum(mask2_pos))
     return dice
 
+# To see what is the parameter of the model before it is trained on the training set.
+print("Parameters before training: \n",model.state_dict())
 
 Loss = nn.CrossEntropyLoss()
 optimizer = optim.SGD(model.parameters(), lr=0.1,momentum=0.9)
@@ -153,6 +155,10 @@ training_data_loader = DataLoader(dataset=train_set, num_workers=num_workers, ba
 # test_set = CustomDataset(folder_data_val)
 valid_loader = DataLoader(dataset=valid_set, num_workers=num_workers, batch_size=batch_size, shuffle=True)
 
+# Create a list for the loss function, so later we can plot the loss function of the training set with
+# the loss function of the validation set.
+train_losses = list()
+val_losses = list()
 
 for iteration, sample in enumerate(training_data_loader):
     img, mask = sample
@@ -173,6 +179,27 @@ for iteration, sample in enumerate(training_data_loader):
     loss.backward() # Backward probacation
     optimizer.step()
     
+    train_losses.append(loss.item())
+    
+    with torch.no_grad():
+        for iteration_v,samp in enumerate(valid_loader):
+            img_val,mask_val = samp
+            
+            show_image_mask(img_val[0,...].squeeze(), mask_val[0,...].squeeze()) #visualise all data in training set
+            plt.pause(1)
+            
+            image_val = img_val.unsqueeze(1)
+            
+            model.eval()
+            mask_prval = model(image_val)
+            
+            val_loss = Loss(mask_prval,mask_val.long())
+            val_losses.append(val_loss.item())
+    
+    
+print("Parameters after training: \n",model.state_dict())
+
+
 
 # The code end here.
 # In[ ]:
