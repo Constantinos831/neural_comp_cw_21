@@ -113,6 +113,7 @@ class CNNSEG(nn.Module): #Define the model
         self.unconv2 = nn.Conv2d(128,32,3,padding=1) # The convolution which takes 128 channel and gives back 32 channels.
         self.unconv3 = nn.Conv2d(64,32,3,padding=1) # The convolution which takes 64 channel and gives back 32 channels.
         self.unconv4 = nn.Conv2d(32,4,3,padding=1)
+        self.unconv5 = nn.Conv2d(4,4,1,padding=0)
         self.pool = nn.MaxPool2d(2,2) # A 2x2 max pooling, we need the indices from the pooling so it is True.https://pytorch.org/docs/stable/generated/torch.nn.MaxPool2d.html
         self.unpool = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True) # A 2x2 unpooling. https://pytorch.org/docs/stable/generated/torch.nn.Upsample.html
         self.norm1 = nn.BatchNorm2d(4)
@@ -130,6 +131,7 @@ class CNNSEG(nn.Module): #Define the model
         x = F.relu(self.norm2(self.conv2b(F.relu(self.norm2(self.unconv2(torch.cat([x2,self.unpool(x)],dim=1)))))))
         x = F.relu(self.norm2(self.conv2b(F.relu(self.norm2(self.unconv3(torch.cat([x1,self.unpool(x)],dim=1)))))))
         x = F.relu(self.norm1(self.conv1b(F.relu(self.norm1(self.unconv4(x))))))
+        x = self.unconv5(x)
         return x
     
 
