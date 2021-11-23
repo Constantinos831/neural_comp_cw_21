@@ -86,42 +86,54 @@ class TestDataset(data.Dataset):
         return len(self.img_files)
 
 
-#Defining the model
-'''
-Since every image in our dataset is black and white, they have a depth of 1. The unedited images have weights and height of 96 and depth 1 
-because of which we will be needing the output to have channel 4. 
-The model is the encode of the image in the CNN ppt on pg78. The model is designed in a way where it takes an image of size 96 * 96 with a
-depth of 1 which will be convoluted to channel 4. The image will be convoluted to a matrix of size 48 * 48 and depth 32 using maxpooling.
-Similarly, the process will continue to convolute the matrix to a new 24 * 24 and depth 64 and then a matrix of 12 * 12 and depth 128 respectively.
-After max pooling, we will then start to convolute the image back to size 24 * 24 and depth 64 using the max unpooling. Again we will repeat the 
-process and image will be convoluted to 48 * 48 and depth 32 and finally to size 96 * 96 and depth 4 which gives us the desired output 
-that we need. So the model will be pools the matrix and then unpools it to give back the same size. 
-'''
+# Since every image is black and white, they have depth 1. So the unedit image has a weight and heigh 96 and depth 1.
+# So we need the output to have channel 4.
+# I use this for the network https://theaisummer.com/unet-architectures/
 
-class CNNSEG(nn.Module): # Define your model
+# The model is the encode of the image in the CNN power point pg78. First of all, the model will take an image with size 96x96 with depth 1 
+# and it will be convoluted to channel 4, it will be convoluted to a matrix of size 48x48 with depht 32 using 
+# max pooling, again it will be convoluted to a new matrix of size 24x24 with depht 64 using max pooling, again it will be convoluted 
+# to a matrix of size 12x12 with depht 128 using max pooling. Then, the last matrix will be convoluted to a matrix
+# of size 24x24 with depth 64 using max unpooling, it will be convoluted to matrix of size 48x48 with depth 32 using
+# max unpooling and it will be convoluted to a matrix of size 96x96 with depht 4 using max unpooling. So, first it pools
+# the matrix and then unpool the matrix to give back the same size. 
+
+class CNNSEG(nn.Module): #Define the model
     def __init__(self):
         super(CNNSEG, self).__init__()
         self.conv1 = nn.Conv2d(1,4,3,padding=1) # The convolution which takes the input image (channel 1) and gives back 4 channels.
-        self.conv2 = nn.Conv2d(4,32,3,padding=1) # The convolution which takes 4 channel and gives back 32 channels.
+        self.conv1b = nn.Conv2d(4,4,3,padding=1)
+        self.conv2 = nn.Conv2d(4,32,3,padding=1)# The convolution which takes 4 channel and gives back 32 channels.
+        self.conv2b = nn.Conv2d(32,32,3,padding=1)
         self.conv3 = nn.Conv2d(32,64,3,padding=1) # The convolution which takes 32 channel and gives back 64 channels.
+        self.conv3b = nn.Conv2d(64,64,3,padding=1)
         self.conv4 = nn.Conv2d(64,128,3,padding=1) # The convolution which takes 64 channel and gives back 128 channels.
-        self.unconv1 = nn.Conv2d(128,64,3,padding=1) # The convolution which takes 128 channel and gives back 64 channels.
-        self.unconv2 = nn.Conv2d(64,32,3,padding=1) # The convolution which takes 64 channel and gives back 32 channels.
-        self.unconv3 = nn.Conv2d(32,4,3,padding=1) # The convolution which takes 32 channel and gives back 4 channels.
-        self.pool = nn.MaxPool2d(2,2,return_indices=True) # A 2x2 max pooling, we need the indices from the pooling so it is True.https://pytorch.org/docs/stable/generated/torch.nn.MaxPool2d.html
-        self.unpool = nn.MaxUnpool2d(2,2) # A 2x2 max unpooling. #https://pytorch.org/docs/stable/generated/torch.nn.MaxUnpool2d.html
-
+        self.conv5 = nn.Conv2d(128,128,3,padding=1)
+        self.unconv1 = nn.Conv2d(256,64,3,padding=1) # The convolution which takes 256 channel and gives back 64 channels.
+        self.unconv2 = nn.Conv2d(128,32,3,padding=1) # The convolution which takes 128 channel and gives back 32 channels.
+        self.unconv3 = nn.Conv2d(64,32,3,padding=1) # The convolution which takes 64 channel and gives back 32 channels.
+        self.unconv4 = nn.Conv2d(32,4,3,padding=1)
+        self.pool = nn.MaxPool2d(2,2) # A 2x2 max pooling, we need the indices from the pooling so it is True.https://pytorch.org/docs/stable/generated/torch.nn.MaxPool2d.html
+        self.unpool = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True) # A 2x2 unpooling. https://pytorch.org/docs/stable/generated/torch.nn.Upsample.html
+        self.norm1 = nn.BatchNorm2d(4)
+        self.norm2 = nn.BatchNorm2d(32)
+        self.norm3 = nn.BatchNorm2d(64)
+        self.norm4 = nn.BatchNorm2d(128)
+        
     def forward(self, x):
-        x = F.relu(self.conv1(x))
-        x , ind2 = self.pool(F.relu(self.conv2(x)))
-        x , ind3 = self.pool(F.relu(self.conv3(x)))
-        x , ind4 = self.pool(F.relu(self.conv4(x)))
-        x = F.relu(self.unconv1(self.unpool(x,ind4)))
-        x = F.relu(self.unconv2(self.unpool(x,ind3)))
-        x = F.relu(self.unconv3(self.unpool(x,ind2)))
+        x = F.relu(self.norm1(self.conv1(x)))
+        x1 = F.relu(self.norm2(self.conv2b(F.relu(self.norm2(self.conv2(x))))))
+        x2 = F.relu(self.norm3(self.conv3b(F.relu(self.norm3(self.conv3(self.pool(x1)))))))
+        x3 = F.relu(self.norm4(self.conv5(F.relu(self.norm4(self.conv4(self.pool(x2)))))))
+        x4 = F.relu(self.norm4(self.conv5(F.relu(self.norm4(self.conv5(self.pool(x3)))))))
+        x = F.relu(self.norm3(self.conv3b(F.relu(self.norm3(self.unconv1(torch.cat([x3,self.unpool(x4)],dim=1)))))))
+        x = F.relu(self.norm2(self.conv2b(F.relu(self.norm2(self.unconv2(torch.cat([x2,self.unpool(x)],dim=1)))))))
+        x = F.relu(self.norm2(self.conv2b(F.relu(self.norm2(self.unconv3(torch.cat([x1,self.unpool(x)],dim=1)))))))
+        x = F.relu(self.norm1(self.conv1b(F.relu(self.norm1(self.unconv4(x))))))
         return x
+    
 
-model = CNNSEG()
+model = CNNSEG().to(device)
 
 
 def categorical_dice(mask1, mask2, label_class=1):
@@ -170,100 +182,99 @@ val_losses = list()
 
 # Training our model on training data and putting the model to train mode.
 
-for iteration, sample in enumerate(training_data_loader):
-    img, mask = sample
-    
-    running_loss = 0.0
+itera = 5
+
+
+
+for epoch in range(itera):
     model.train()
-    
-    # show_image_mask(img[0,...].squeeze(), mask[0,...].squeeze()) #visualise all data in training set
-    # plt.pause(1)
-    
-    # To put the dimension of the channel in the second place of the image. https://discuss.pytorch.org/t/change-the-dimension-of-tensor/51459/7
-    im = img.unsqueeze(1) 
-    
-    # The optimised gradients set to zero. https://pytorch.org/docs/stable/optim.html
-    optimizer.zero_grad()
-    
-    # Returns the predicted mask. Forward probacation
-    mask_p = model(im) 
-    
-    # Calculate the cross entropy loss for the predicted mask and the actual mask.
-    loss = Loss(mask_p,mask.long())
-    
-    # Backward probacation
-    loss.backward() 
-    optimizer.step()
-    
-    # Appending the losses to our loss variable to then apply cross entropy loss.
-    train_losses.append(loss.item())
-    
-    # Validating our model by computing the loss function based on our training set and validating set.
-    with torch.no_grad():
-        for iteration_v,samp in enumerate(valid_loader):
-            img_val,mask_val = samp
-            
-            # show_image_mask(img_val[0,...].squeeze(), mask_val[0,...].squeeze()) #visualise all data in training set
-            # plt.pause(1)
-            
-            image_val = img_val.unsqueeze(1)
-            
-            # Putting the model to evaluate phase.
-            model.eval()
-            mask_prval = model(image_val)
-            
-            val_loss = Loss(mask_prval,mask_val.long())
-            val_losses.append(val_loss.item())
-            
-            #Print the loss of the trained model
-            running_loss += loss.item()
-            if iteration_v % 2 == 1:
-              print('[%d, %5d] loss: %.3f' %
-                          (iteration + 1, iteration_v + 1, running_loss / 2))
-              running_loss = 0.0
-    
-    
+    running_loss = 0.0
+    for iteration, sample in enumerate(training_data_loader):
+        img, mask = sample
+        img = img.to(device)
+        mask = mask.to(device)
+        
+        #show_image_mask(img[0,...].squeeze(), mask[0,...].squeeze()) #visualise all data in training set
+        #plt.pause(1)
+        
+        # To put the dimension of the channel in the second place of the image. https://discuss.pytorch.org/t/change-the-dimension-of-tensor/51459/7
+        im = img.unsqueeze(1) 
+        
+        # The optimised gradients set to zero. https://pytorch.org/docs/stable/optim.html
+        optimizer.zero_grad()
+        
+        # Returns the predicted mask. Forward probacation
+        mask_p = model(im) 
+        
+        # Calculate the cross entropy loss for the predicted mask and the actual mask.
+        loss = Loss(mask_p,mask.long())
+        
+        # Backward probacation
+        loss.backward() 
+        optimizer.step()
+        
+        # Appending the losses to our loss variable to then apply cross entropy loss.
+        train_losses.append(loss.item())
+        
+        # Validating our model by computing the loss function based on our training set and validating set.
+        with torch.no_grad():
+            for iteration_v,samp in enumerate(valid_loader):
+                img_val,mask_val = samp
+                img_val = img_val.to(device)
+                mask_val = mask_val.to(device)
+                
+                # show_image_mask(img_val[0,...].squeeze(), mask_val[0,...].squeeze()) #visualise all data in training set
+                # plt.pause(1)
+                
+                image_val = img_val.unsqueeze(1)
+                
+                # Putting the model to evaluate phase.
+                model.eval()
+                mask_prval = model(image_val)
+                val_loss = Loss(mask_prval,mask_val.long())
+                val_losses.append(val_loss.item())
+                mas_val = torch.argmax(mask_prval,dim=1)
+                
+
+
+plt.plot(range(len(train_losses)),train_losses,'r',label="Training loss")
+plt.plot(range(len(val_losses)),val_losses,'g',label="Validation loss")
+plt.xlabel("Training iterations")
+plt.ylabel("Loss")
+plt.legend()
+plt.show()
+
 # print("Parameters after training: \n",model.state_dict())
 
-#Saving the model on a desired path.
-PATH = './model.pth'
-torch.save(model.state_dict(), PATH)
-
-# Loading our saved model in order to use the previous trained model
-model = CNNSEG()
-model.load_state_dict(torch.load(PATH))
-
 # Applying our TestDataset function to get the images.
-test_data_path = '/content/drive/MyDrive/Masters/CW/data/test'
-test_set = TestDataset(test_data_path)
-test_data_loader = DataLoader(dataset=test_set, num_workers=num_workers,batch_size=batch_size, shuffle=True)
+test_data_path = './data/test'
 
 num_workers = 4
 batch_size = 2
 
+test_set = TestDataset(test_data_path)
+test_data_loader = DataLoader(dataset=test_set, num_workers=num_workers,batch_size=batch_size, shuffle=True)
+
 # Evaluating our model on the testing data and predicting results
-with torch.no_grad():
-    for iteration_test, samp in enumerate(test_data_loader):
-        img_test = samp
-
-        #plt.imshow(img_val[0,...].squeeze(), cmap='gray') #visualise all images in test set
-        #plt.pause(1)
-
-        image_test = img_test.unsqueeze(1)
-
-        optimizer.zero_grad()
+for iteration_test, samp in enumerate(test_data_loader):
+    img_test = samp
+    img_test = img_test.to(device)
         
-        # Putting the model to evaluate mode
-        model.eval()
-        mask_test = model(image_test)
-        loss.backward() # Backward probacation
-        optimizer.step()
+    plt.imshow(img_test[0,...].squeeze(), cmap='gray') #visualise all images in test set
+    plt.pause(1)
+    
+    image_test = img_test.unsqueeze(1)
         
-
-        show_image_mask(img_val[0,...].squeeze(), mask_test.squeeze()) #visualise all data in training set
-        #plt.pause(1)
-
+    # Putting the model to evaluate mode
+    model.eval()
+    mask_test = model(image_test)
         
+    mask1c_test = torch.argmax(mask_test,dim=1)
+    print(mask1c_test.shape)
+        
+    plt.imshow(mask1c_test[0,...].squeeze(), cmap='gray')
+    plt.pause(1)
+
 
 # The code end here.
 # In[ ]:
